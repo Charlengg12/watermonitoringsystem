@@ -1,8 +1,7 @@
 // --- CONFIGURATION ---
 
 // Update this to point to your PHP backend on your cPanel hosting
-const SERVER_URL = "http://yourdomain.com/sensor_data.php";
-// Or use: const SERVER_URL = "http://lqm.ehub.ph/sensor_data.php";
+const SERVER_URL = "http://water.monitoring.ehub.ph/sensor_data.php";
 
 const FETCH_INTERVAL_MS = 5000; // Fetch data every 5 seconds
 

@@ -698,12 +698,11 @@ if ($station_id) {
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
   <script>
-    // --- ESP32 DATA FETCHING AND UI UPDATES ---
+    // --- SENSOR DATA FETCHING AND UI UPDATES ---
 
-    // IMPORTANT: This IP address is now set to 192.168.1.100
-    const ESP32_IP = "http://192.168.1.100";
-    const READINGS_URL = ESP32_IP + '/readings';
-    const START_TEST_URL = ESP32_IP + '/start_test';
+    // API endpoint for sensor data
+    const SERVER_URL = "http://water.monitoring.ehub.ph/sensor_data.php";
+    const READINGS_URL = SERVER_URL;
 
     const GAUGE_CONFIG = {
       // Parameter: [Max Value for Gauge, Rotation Offset (degrees), Decimals]
@@ -743,69 +742,66 @@ if ($station_id) {
      * @param {number} value - The current sensor reading.
      */
     function rotateNeedle(param, value) {
-      const needle = document.getElementById(needle - $ {
-        param
-      });
+      const needle = document.getElementById(`needle-${param}`);
       if (!needle) return;
 
       // Special handling for the 'color' gauge: it's analysis, not a direct reading.
       // It will be reset to 0/min rotation in updateGaugeDisplay.
       if (param === 'color') {
-        needle.style.transform = translate(-50 % , 0) rotate($ {
-            GAUGE_CONFIG[param][1]
-          }
-          deg);
+        needle.style.transform = `translate(-50%, 0) rotate(${GAUGE_CONFIG[param][1]}deg)`;
         return;
       }
 
       const rotation = getNeedleRotation(param, value);
-      needle.style.transform = translate(-50 % , 0) rotate($ {
-          rotation
-        }
-        deg);
+      needle.style.transform = `translate(-50%, 0) rotate(${rotation}deg)`;
     }
 
     /**
      * Updates the gauge display (LCD value, needle, and status label).
      * @param {string} param - The sensor parameter key.
-     * @param {Object} data - The sensor data object from the ESP32.
+     * @param {Object} data - The sensor data object from the API.
      * @param {number} [decimals=0] - Number of decimals to display.
      */
     function updateGaugeDisplay(param, data, decimals = 0) {
-      const paramValueKey = param.charAt(0).toUpperCase() + param.slice(1) + '_Value';
-      const paramStatusKey = param.charAt(0).toUpperCase() + param.slice(1) + '_Status';
+      // Map parameter names to API response keys
+      const paramKeyMap = {
+        'tds': { value: 'TDS_Value', status: 'TDS_Status' },
+        'ph': { value: 'PH_Value', status: 'PH_Status' },
+        'turbidity': { value: 'Turbidity_Value', status: 'Turbidity_Status' },
+        'lead': { value: 'Lead_Value', status: 'Lead_Status' },
+        'color': { value: 'Color_Result', status: 'Color_Status' }
+      };
+
+      const keys = paramKeyMap[param];
+      if (!keys) return;
 
       let displayValue;
       let displayStatus;
       let sensorValue = 0; // Default sensor value for needle calculation
 
       if (param === 'color') {
-        displayValue = data.Color_Result || '--';
-        displayStatus = data.Color_Status || 'N/A';
+        displayValue = data[keys.value] || '--';
+        displayStatus = data[keys.status] || 'N/A';
         // Set needle to min rotation for color
         rotateNeedle(param, 0);
       } else {
-        const value = parseFloat(data[paramValueKey]);
+        const value = parseFloat(data[keys.value]);
         sensorValue = isNaN(value) ? 0 : value;
         displayValue = isNaN(value) ? '--' : value.toFixed(decimals);
-        displayStatus = data[paramStatusKey] || 'N/A';
+        displayStatus = data[keys.status] || 'N/A';
 
         // Rotate the needle only if it's a numerical gauge
         rotateNeedle(param, sensorValue);
       }
 
       // Update LCD value
-      const lcdElement = document.getElementById($ {
-        param
-      } - gauge - value);
+      const lcdElement = document.getElementById(`${param}-gauge-value`);
       if (lcdElement) {
         lcdElement.textContent = displayValue;
       }
 
       // Update Status Label
-      const statusElement = document.getElementById($ {
-        param
-      } - status);
+      const statusElement = document.getElementById(`${param}-status`);
       if (statusElement) {
         statusElement.className = 'status-label mt-2';
 
@@ -824,7 +820,7 @@ if ($station_id) {
     }
 
     /**
-     * Fetches the latest sensor readings from the ESP32 and updates the dashboard.
+     * Fetches the latest sensor readings from the API endpoint and updates the dashboard.
      */
     function fetchReadings() {
       const timestampElement = document.getElementById('last-update-timestamp');
@@ -836,17 +832,13 @@ if ($station_id) {
           if (response.status === 200) {
             sensorStatusLabel.className = 'status-label status-online';
             sensorStatusLabel.innerHTML = 'ONLINE <span class="status-dot"></span>';
-            statusMessageElement.textContent = Connected to ESP32 at $ {
-              ESP32_IP
-            };
+            statusMessageElement.textContent = 'Connected to sensor data API';
             return response.json();
           } else if (response.status === 503) {
-            statusMessageElement.textContent = ESP32 is busy running test cycle.Retrying in 5 s...;
-            throw new Error('System Busy');
+            statusMessageElement.textContent = 'Service Unavailable: Waiting for sensor data. Retrying in 5s...';
+            throw new Error('Service Unavailable');
           } else {
-            throw new Error(HTTP Status Error: $ {
-              response.status
-            });
+            throw new Error(`HTTP Status Error: ${response.status}`);
           }
         })
         .then(data => {
@@ -859,26 +851,18 @@ if ($station_id) {
         })
         .catch(error => {
           console.error('Fetch Readings Error:', error);
-          if (error.message !== 'System Busy') {
+          if (error.message !== 'Service Unavailable') {
             sensorStatusLabel.className = 'status-label status-offline';
             sensorStatusLabel.innerHTML = 'OFFLINE <span class="status-dot"></span>';
             timestampElement.textContent = 'Connection Failed';
-            statusMessageElement.textContent = CRITICAL: Could not reach ESP32 at $ {
-              ESP32_IP
-            }.Check power / network.;
+            statusMessageElement.textContent = 'CRITICAL: Could not reach sensor data API. Check connection.';
           }
           // Reset gauges to error state
           for (const param in GAUGE_CONFIG) {
             rotateNeedle(param, GAUGE_CONFIG[param][1]); // Point to min rotation
-            document.getElementById($ {
-              param
-            } - gauge - value).textContent = '--';
-            document.getElementById($ {
-              param
-            } - status).textContent = (error.message.includes('System Busy')) ? 'BUSY' : 'Error';
-            document.getElementById($ {
-              param
-            } - status).className = 'status-label mt-2 status-failed';
+            document.getElementById(`${param}-gauge-value`).textContent = '--';
+            document.getElementById(`${param}-status`).textContent = (error.message.includes('Service Unavailable')) ? 'WAITING' : 'Error';
+            document.getElementById(`${param}-status`).className = 'status-label mt-2 status-failed';
           }
         });
     }
@@ -894,6 +878,8 @@ if ($station_id) {
         setInterval(fetchReadings, 5000); // Poll every 5 seconds
       } else {
         document.getElementById('status-message').textContent = 'Please select a refilling station to start monitoring.';
+        // Still fetch readings even without station to show any available data
+        fetchReadings();
       }
 
 
@@ -904,26 +890,10 @@ if ($station_id) {
           return;
         }
 
-        fetch(START_TEST_URL, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/x-www-form-urlencoded'
-            }
-          })
-          .then(response => {
-            if (response.status === 200) {
-              alert("Test cycle successfully triggered.");
-            } else if (response.status === 409) {
-              alert("System is currently busy. Please wait for the current cycle to finish.");
-            } else {
-              alert("Failed to start test. Status: " + response.status);
-            }
-            fetchReadings();
-          })
-          .catch(error => {
-            console.error('Start Test Error:', error);
-            alert("Connection error: Could not reach ESP32. Check network and IP.");
-          });
+        // Note: Start test functionality would need to be implemented via ESP32 direct endpoint
+        // or through a separate API endpoint if available
+        alert("Start test feature requires ESP32 direct connection. Please configure if needed.");
+        fetchReadings();
       });
 
       // 3. Auto Test Settings Modal Logic (Frequency switching)

@@ -10,11 +10,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
-// Database configuration (adjust these to your cPanel MySQL settings)
+// Database configuration - use same credentials from db.php
 $db_host = 'localhost';
-$db_user = 'your_db_user';
-$db_pass = 'your_db_password';
-$db_name = 'your_db_name';
+$db_user = 'ehubph_Andrei';
+$db_pass = '@Charles291';
+$db_name = 'ehubph_water_monitoring';
 
 // File-based storage as fallback (if not using database)
 $data_file = 'sensor_readings.json';
@@ -70,7 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 
         $stmt->bind_param(
-            "dssdsdsdsss",
+            "dsdsdsdssss",
             $data['TDS_Value'],
             $data['TDS_Status'],
             $data['PH_Value'],
